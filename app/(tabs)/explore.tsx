@@ -1,112 +1,224 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Collapsible } from '@/components/ui/collapsible';
-import { ExternalLink } from '@/components/external-link';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Fonts } from '@/constants/theme';
+import { appColors } from '@/constants/app-theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 
-export default function TabTwoScreen() {
+import { trendCards, timeline } from '@/constants/MockData';
+
+export default function HistoryScreen() {
+  const colorScheme = useColorScheme() ?? 'light';
+  const colors = appColors[colorScheme];
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
-      headerImage={
-        <IconSymbol
-          size={310}
-          color="#808080"
-          name="chevron.left.forwardslash.chevron.right"
-          style={styles.headerImage}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText
-          type="title"
-          style={{
-            fontFamily: Fonts.rounded,
-          }}>
-          Explore
-        </ThemedText>
-      </ThemedView>
-      <ThemedText>This app includes example code to help you get started.</ThemedText>
-      <Collapsible title="File-based routing">
-        <ThemedText>
-          This app has two screens:{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/explore.tsx</ThemedText>
-        </ThemedText>
-        <ThemedText>
-          The layout file in <ThemedText type="defaultSemiBold">app/(tabs)/_layout.tsx</ThemedText>{' '}
-          sets up the tab navigator.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/router/introduction">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Android, iOS, and web support">
-        <ThemedText>
-          You can open this project on Android, iOS, and the web. To open the web version, press{' '}
-          <ThemedText type="defaultSemiBold">w</ThemedText> in the terminal running this project.
-        </ThemedText>
-      </Collapsible>
-      <Collapsible title="Images">
-        <ThemedText>
-          For static images, you can use the <ThemedText type="defaultSemiBold">@2x</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">@3x</ThemedText> suffixes to provide files for
-          different screen densities
-        </ThemedText>
-        <Image
-          source={require('@/assets/images/react-logo.png')}
-          style={{ width: 100, height: 100, alignSelf: 'center' }}
-        />
-        <ExternalLink href="https://reactnative.dev/docs/images">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Light and dark mode components">
-        <ThemedText>
-          This template has light and dark mode support. The{' '}
-          <ThemedText type="defaultSemiBold">useColorScheme()</ThemedText> hook lets you inspect
-          what the user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Animations">
-        <ThemedText>
-          This template includes an example of an animated component. The{' '}
-          <ThemedText type="defaultSemiBold">components/HelloWave.tsx</ThemedText> component uses
-          the powerful{' '}
-          <ThemedText type="defaultSemiBold" style={{ fontFamily: Fonts.mono }}>
-            react-native-reanimated
-          </ThemedText>{' '}
-          library to create a waving hand animation.
-        </ThemedText>
-        {Platform.select({
-          ios: (
-            <ThemedText>
-              The <ThemedText type="defaultSemiBold">components/ParallaxScrollView.tsx</ThemedText>{' '}
-              component provides a parallax effect for the header image.
-            </ThemedText>
-          ),
-        })}
-      </Collapsible>
-    </ParallaxScrollView>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        style={{ backgroundColor: colors.background }}>
+        <View style={styles.header}>
+          <Text style={[styles.overline, { color: colors.accent }]}>Monitoring</Text>
+          <Text style={[styles.title, { color: colors.text }]}>History & Trends</Text>
+          <Text style={[styles.subtitle, { color: colors.subtext }]}>
+            A simple timeline view for reviewing repeated reminders and possible behavior changes.
+          </Text>
+        </View>
+
+        <View style={styles.filterRow}>
+          <View style={[styles.filterChipActive, { backgroundColor: colors.accentSoft }]}>
+            <Text style={[styles.filterChipActiveText, { color: colors.accent }]}>7 days</Text>
+          </View>
+          <View style={[styles.filterChip, { borderColor: colors.border }]}>
+            <Text style={[styles.filterChipText, { color: colors.subtext }]}>30 days</Text>
+          </View>
+          <View style={[styles.filterChip, { borderColor: colors.border }]}>
+            <Text style={[styles.filterChipText, { color: colors.subtext }]}>All time</Text>
+          </View>
+        </View>
+
+        <View style={styles.trendRow}>
+          {trendCards.map((item) => {
+            const toneColor = item.tone === 'warning' ? colors.warning : colors.success;
+
+            return (
+              <View
+                key={item.label}
+                style={[
+                  styles.trendCard,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
+                ]}>
+                <Text style={[styles.trendLabel, { color: colors.subtext }]}>{item.label}</Text>
+                <Text style={[styles.trendValue, { color: colors.text }]}>{item.value}</Text>
+                <Text style={[styles.trendFootnote, { color: toneColor }]}>last 7 days</Text>
+              </View>
+            );
+          })}
+        </View>
+
+        <View
+          style={[
+            styles.patternCard,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+            },
+          ]}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Pattern summary</Text>
+          <Text style={[styles.patternText, { color: colors.subtext }]}>
+            The recent entries suggest that kitchen-related task completion should be monitored more
+            closely for Patient A.
+          </Text>
+        </View>
+
+        {timeline.map((group) => (
+          <View key={group.day} style={styles.timelineGroup}>
+            <Text style={[styles.timelineHeading, { color: colors.text }]}>{group.day}</Text>
+
+            {group.entries.map((entry) => (
+              <View
+                key={entry}
+                style={[
+                  styles.timelineCard,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
+                ]}>
+                <View style={[styles.dot, { backgroundColor: colors.accent }]} />
+                <Text style={[styles.timelineText, { color: colors.subtext }]}>{entry}</Text>
+              </View>
+            ))}
+          </View>
+        ))}
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  headerImage: {
-    color: '#808080',
-    bottom: -90,
-    left: -35,
-    position: 'absolute',
+  safeArea: {
+    flex: 1,
   },
-  titleContainer: {
+  content: {
+    paddingHorizontal: 20,
+    paddingTop: 48,
+    paddingBottom: 32,
+  },
+  header: {
+    marginBottom: 18,
+  },
+  overline: {
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginBottom: 8,
+  },
+  title: {
+    fontSize: 30,
+    fontWeight: '700',
+    lineHeight: 36,
+  },
+  subtitle: {
+    marginTop: 8,
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  filterRow: {
     flexDirection: 'row',
-    gap: 8,
+    marginBottom: 18,
+  },
+  filterChipActive: {
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginRight: 8,
+  },
+  filterChipActiveText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  filterChip: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginRight: 8,
+  },
+  filterChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  trendRow: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 18,
+  },
+  trendCard: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 20,
+    padding: 16,
+  },
+  trendLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 10,
+  },
+  trendValue: {
+    fontSize: 28,
+    fontWeight: '700',
+    lineHeight: 32,
+  },
+  trendFootnote: {
+    marginTop: 6,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  patternCard: {
+    borderWidth: 1,
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 18,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  patternText: {
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  timelineGroup: {
+    marginBottom: 18,
+  },
+  timelineHeading: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 10,
+  },
+  timelineCard: {
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 999,
+    marginTop: 7,
+    marginRight: 10,
+  },
+  timelineText: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 21,
   },
 });
