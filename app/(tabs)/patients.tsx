@@ -7,12 +7,14 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  TouchableOpacity,
   View,
 } from 'react-native';
+import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { appColors } from '@/constants/app-theme';
-import { patientSupportTags } from '@/constants/care-data';
+import { patientSexOptions, patientSupportTags } from '@/constants/care-data';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { formatDate } from '@/lib/date';
 import { useAppState } from '@/providers/app-state';
@@ -51,7 +53,7 @@ export default function PatientsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = appColors[colorScheme];
   const router = useRouter();
-  const { patients, addPatient, selectPatient } = useAppState();
+  const { patients, addPatient, deletePatient, selectPatient } = useAppState();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<PatientFormState>(initialFormState);
 
@@ -68,6 +70,21 @@ export default function PatientsScreen() {
     updateField(
       'supportTags',
       exists ? form.supportTags.filter((item) => item !== tag) : [...form.supportTags, tag]
+    );
+  };
+
+  const handleDeletePatient = (patientId: string, patientName: string) => {
+    Alert.alert(
+      'Delete patient',
+      `Remove ${patientName} and all of their saved analyses?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => deletePatient(patientId),
+        },
+      ]
     );
   };
 
@@ -103,7 +120,9 @@ export default function PatientsScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+    <SafeAreaView
+      edges={['top', 'left', 'right']}
+      style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <ScrollView
         style={{ backgroundColor: colors.background }}
         contentContainerStyle={styles.content}
@@ -158,7 +177,8 @@ export default function PatientsScreen() {
                   placeholder="Age"
                   placeholderTextColor={colors.subtext}
                   value={form.age}
-                  onChangeText={(value) => updateField('age', value)}
+                  onChangeText={(value) => updateField('age', value.replace(/[^0-9]/g, ''))}
+                  keyboardType="number-pad"
                   style={[
                     styles.input,
                     styles.inlineInput,
@@ -169,21 +189,35 @@ export default function PatientsScreen() {
                     },
                   ]}
                 />
-                <TextInput
-                  placeholder="Sex"
-                  placeholderTextColor={colors.subtext}
-                  value={form.sex}
-                  onChangeText={(value) => updateField('sex', value)}
-                  style={[
-                    styles.input,
-                    styles.inlineInput,
-                    {
-                      backgroundColor: colors.background,
-                      borderColor: colors.border,
-                      color: colors.text,
-                    },
-                  ]}
-                />
+                <View style={styles.inlineInput}>
+                  <Text style={[styles.formLabel, { color: colors.text }]}>Sex</Text>
+                  <View style={styles.optionWrap}>
+                    {patientSexOptions.map((option) => {
+                      const isSelected = form.sex === option;
+
+                      return (
+                        <Pressable
+                          key={option}
+                          onPress={() => updateField('sex', option)}
+                          style={[
+                            styles.optionChip,
+                            {
+                              backgroundColor: isSelected ? colors.accentSoft : colors.background,
+                              borderColor: isSelected ? colors.accent : colors.border,
+                            },
+                          ]}>
+                          <Text
+                            style={[
+                              styles.optionText,
+                              { color: isSelected ? colors.accent : colors.subtext },
+                            ]}>
+                            {option}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
               </View>
               <TextInput
                 placeholder="Caregiver name"
@@ -356,38 +390,49 @@ export default function PatientsScreen() {
         </View>
 
         {patients.map((patient) => (
-          <Pressable
+          <Swipeable
             key={patient.id}
-            onPress={() =>
-              router.push({
-                pathname: '/patient/[id]',
-                params: { id: patient.id },
-              })
-            }
-            style={[
-              styles.patientCard,
-              {
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-              },
-            ]}>
-            <View style={styles.patientCardTop}>
-              <View style={styles.patientCardText}>
-                <Text style={[styles.patientName, { color: colors.text }]}>{patient.name}</Text>
-                <Text style={[styles.patientMeta, { color: colors.subtext }]}>
-                  {patient.age} years old, {patient.sex}
+            overshootLeft={false}
+            renderLeftActions={() => (
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => handleDeletePatient(patient.id, patient.name)}
+                style={[styles.deleteAction, { backgroundColor: colors.danger }]}>
+                <Text style={styles.deleteActionText}>Delete</Text>
+              </TouchableOpacity>
+            )}>
+            <Pressable
+              onPress={() =>
+                router.push({
+                  pathname: '/patient/[id]',
+                  params: { id: patient.id },
+                })
+              }
+              style={[
+                styles.patientCard,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                },
+              ]}>
+              <View style={styles.patientCardTop}>
+                <View style={styles.patientCardText}>
+                  <Text style={[styles.patientName, { color: colors.text }]}>{patient.name}</Text>
+                  <Text style={[styles.patientMeta, { color: colors.subtext }]}>
+                    {patient.age} years old, {patient.sex}
+                  </Text>
+                </View>
+                <Text style={[styles.lastAnalysis, { color: colors.subtext }]}>
+                  {formatDate(patient.lastAnalysisAt)}
                 </Text>
               </View>
-              <Text style={[styles.lastAnalysis, { color: colors.subtext }]}>
-                {formatDate(patient.lastAnalysisAt)}
-              </Text>
-            </View>
 
-            <Text style={[styles.focusNote, { color: colors.text }]}>{patient.focusNote}</Text>
-            <Text style={[styles.cardBody, { color: colors.subtext }]}>
-              {patient.supportTags.slice(0, 3).join(' - ') || 'General support profile'}
-            </Text>
-          </Pressable>
+              <Text style={[styles.focusNote, { color: colors.text }]}>{patient.focusNote}</Text>
+              <Text style={[styles.cardBody, { color: colors.subtext }]}>
+                {(patient.supportTags ?? []).slice(0, 3).join(' - ') || 'General support profile'}
+              </Text>
+            </Pressable>
+          </Swipeable>
         ))}
       </ScrollView>
     </SafeAreaView>
@@ -468,10 +513,26 @@ const styles = StyleSheet.create({
   textArea: {
     minHeight: 100,
   },
+  optionWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
   formLabel: {
     fontSize: 14,
     fontWeight: '700',
     marginTop: 4,
+  },
+  optionChip: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  optionText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   tagWrap: {
     flexDirection: 'row',
@@ -511,6 +572,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 22,
     padding: 18,
+    marginTop: 12,
   },
   patientCardTop: {
     flexDirection: 'row',
@@ -539,5 +601,17 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     lineHeight: 22,
+  },
+  deleteAction: {
+    width: 100,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+  },
+  deleteActionText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

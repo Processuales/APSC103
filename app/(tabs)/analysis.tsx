@@ -1,5 +1,6 @@
 import { useRouter } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { appColors } from '@/constants/app-theme';
@@ -11,20 +12,39 @@ export default function AnalysisScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = appColors[colorScheme];
   const router = useRouter();
-  const { patients, analyses, selectedPatientId, selectPatient } = useAppState();
+  const { patients, analyses, deleteAnalysis, selectedPatientId, selectPatient } = useAppState();
 
   const selectedPatient = patients.find((patient) => patient.id === selectedPatientId) ?? patients[0];
   const filteredAnalyses = analyses.filter((analysis) => analysis.patientId === selectedPatient?.id);
 
+  const handleDeleteAnalysis = (analysisId: string, clipLabel: string) => {
+    Alert.alert(
+      'Delete analysis',
+      `Remove the analysis for "${clipLabel}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => deleteAnalysis(analysisId),
+        },
+      ]
+    );
+  };
+
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+    <SafeAreaView
+      edges={['top', 'left', 'right']}
+      style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <ScrollView
         style={{ backgroundColor: colors.background }}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Text style={[styles.title, { color: colors.text }]}>Analysis</Text>
-          <Text style={[styles.subtitle, { color: colors.subtext }]}>Anlysis uploaded clips</Text>
+          <Text style={[styles.subtitle, { color: colors.subtext }]}>
+            Review uploaded clips and live OpenRouter results
+          </Text>
         </View>
 
         <View
@@ -72,48 +92,68 @@ export default function AnalysisScreen() {
 
         {filteredAnalyses.length ? (
           filteredAnalyses.map((analysis) => (
-            <Pressable
+            <Swipeable
               key={analysis.id}
-              onPress={() =>
-                router.push({
-                  pathname: '/analysis/[id]',
-                  params: { id: analysis.id },
-                })
-              }
-              style={[
-                styles.analysisCard,
-                {
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                },
-              ]}>
-              <View style={styles.analysisTopRow}>
-                <Text style={[styles.analysisDay, { color: colors.accent }]}>
-                  {formatRelativeDay(analysis.createdAt)}
-                </Text>
-                <Text style={[styles.analysisTime, { color: colors.subtext }]}>
-                  {formatDateTime(analysis.createdAt)}
-                </Text>
-              </View>
-
-              <Text style={[styles.analysisTitle, { color: colors.text }]}>{analysis.clipLabel}</Text>
-              <Text style={[styles.analysisSummary, { color: colors.subtext }]}>
-                {analysis.observedSummary}
-              </Text>
-
-              <View style={styles.badgeRow}>
-                <View style={[styles.badge, { backgroundColor: colors.accentSoft }]}>
-                  <Text style={[styles.badgeText, { color: colors.accent }]}>
-                    Category: {analysis.category}
+              overshootLeft={false}
+              renderLeftActions={() => (
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={() => handleDeleteAnalysis(analysis.id, analysis.clipLabel)}
+                  style={[styles.deleteAction, { backgroundColor: colors.danger }]}>
+                  <Text style={styles.deleteActionText}>Delete</Text>
+                </TouchableOpacity>
+              )}>
+              <Pressable
+                onPress={() =>
+                  router.push({
+                    pathname: '/analysis/[id]',
+                    params: { id: analysis.id },
+                  })
+                }
+                style={[
+                  styles.analysisCard,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
+                ]}>
+                <View style={styles.analysisTopRow}>
+                  <Text style={[styles.analysisDay, { color: colors.accent }]}>
+                    {formatRelativeDay(analysis.createdAt)}
+                  </Text>
+                  <Text style={[styles.analysisTime, { color: colors.subtext }]}>
+                    {formatDateTime(analysis.createdAt)}
                   </Text>
                 </View>
-                <View style={[styles.badge, { backgroundColor: colors.background }]}>
-                  <Text style={[styles.badgeText, { color: colors.text }]}>
-                    Status: {analysis.status}
-                  </Text>
+
+                <Text style={[styles.analysisTitle, { color: colors.text }]}>{analysis.clipLabel}</Text>
+                <Text style={[styles.analysisSummary, { color: colors.subtext }]}>
+                  {analysis.processingStage === 'complete'
+                    ? analysis.observedSummary
+                    : analysis.processingMessage}
+                </Text>
+
+                <View style={styles.badgeRow}>
+                  <View style={[styles.badge, { backgroundColor: colors.accentSoft }]}>
+                    <Text style={[styles.badgeText, { color: colors.accent }]}>
+                      Category: {analysis.category}
+                    </Text>
+                  </View>
+                  <View style={[styles.badge, { backgroundColor: colors.background }]}>
+                    <Text style={[styles.badgeText, { color: colors.text }]}>
+                      Status: {analysis.status}
+                    </Text>
+                  </View>
+                  {analysis.processingStage !== 'complete' ? (
+                    <View style={[styles.badge, { backgroundColor: colors.background }]}>
+                      <Text style={[styles.badgeText, { color: colors.text }]}>
+                        Frames: {analysis.sceneDescriptions?.length ?? 0}/10 described
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
-              </View>
-            </Pressable>
+              </Pressable>
+            </Swipeable>
           ))
         ) : (
           <View
@@ -198,6 +238,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 22,
     padding: 18,
+    marginTop: 12,
   },
   analysisTopRow: {
     flexDirection: 'row',
@@ -249,5 +290,17 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontSize: 14,
     lineHeight: 21,
+  },
+  deleteAction: {
+    width: 100,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+  },
+  deleteActionText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

@@ -3,12 +3,14 @@ import { ImagePickerAsset } from 'expo-image-picker';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
 import {
+  defaultPatientNamesById,
   type AnalysisRecord,
+  type AnalysisStage,
   type PatientProfile,
-  type ReminderType,
   seedAnalyses,
   seedPatients,
 } from '@/constants/care-data';
+import { analyzeClipWithOpenRouter } from '@/lib/openrouter-analysis';
 
 type StoredState = {
   patients: PatientProfile[];
@@ -17,7 +19,6 @@ type StoredState = {
 };
 
 type CreatePatientInput = Omit<PatientProfile, 'id' | 'lastAnalysisAt'>;
-
 type UpdatePatientInput = Partial<Omit<PatientProfile, 'id'>>;
 type UpdateAnalysisInput = Partial<Omit<AnalysisRecord, 'id' | 'patientId'>>;
 
@@ -25,16 +26,19 @@ type AppStateContextValue = {
   patients: PatientProfile[];
   analyses: AnalysisRecord[];
   selectedPatientId: string | null;
+  activeAnalysisId: string | null;
+  isAnalyzingClip: boolean;
   isReady: boolean;
   addPatient: (input: CreatePatientInput) => PatientProfile;
+  deletePatient: (patientId: string) => void;
   updatePatient: (patientId: string, updates: UpdatePatientInput) => void;
+  deleteAnalysis: (analysisId: string) => void;
   updateAnalysis: (analysisId: string, updates: UpdateAnalysisInput) => void;
-  addAnalysisFromClip: (patientId: string, asset: ImagePickerAsset) => AnalysisRecord;
+  startClipAnalysis: (patientId: string, asset: ImagePickerAsset) => AnalysisRecord;
   selectPatient: (patientId: string) => void;
 };
 
 const STORAGE_KEY = 'caregiver-app-state-v1';
-
 const AppStateContext = createContext<AppStateContextValue | null>(null);
 
 const initialState: StoredState = {
@@ -56,69 +60,84 @@ function extractClipLabel(asset: ImagePickerAsset) {
   return segments[segments.length - 1]?.split('?')[0] || 'Uploaded clip';
 }
 
-function buildAnalysisFromClip(patient: PatientProfile, asset: ImagePickerAsset): AnalysisRecord {
-  const clipLabel = extractClipLabel(asset);
-  const combinedContext = `${patient.focusNote} ${patient.knownRiskAreas} ${patient.supportTags.join(' ')}`.toLowerCase();
-
-  let category = 'Routine support';
-  let status = 'Review ready';
-  let observedSummary = 'Clip uploaded and queued for caregiver review.';
-  let observedActivity = `The uploaded clip "${clipLabel}" has been saved for ${patient.name}.`;
-  let systemInterpretation =
-    'This placeholder entry keeps the clip tied to the patient profile until video analysis is added.';
-  let suggestedReminder = 'No reminder has been suggested yet.';
-  let reminderType: ReminderType = 'low-priority note';
-
-  if (combinedContext.includes('kitchen') || combinedContext.includes('meal')) {
-    category = 'Incomplete task';
-    status = 'Reminder suggested';
-    observedSummary = 'Kitchen-related activity was uploaded for follow-up review.';
-    observedActivity = `The clip "${clipLabel}" may be relevant to kitchen or meal-prep routines.`;
-    systemInterpretation =
-      'Based on the patient profile, this clip should be reviewed for unfinished task patterns rather than treated as a medical alert.';
-    suggestedReminder = 'Check whether a short kitchen follow-up reminder would help if this happens again.';
-    reminderType = 'follow-up reminder';
-  } else if (combinedContext.includes('medication')) {
-    category = 'Routine support';
-    status = 'Review needed';
-    observedSummary = 'Medication-related routine clip uploaded for review.';
-    observedActivity = `The clip "${clipLabel}" is now associated with the patient’s medication routine.`;
-    systemInterpretation =
-      'Medication context was detected from the patient profile. A caregiver can later decide whether a reminder would be helpful.';
-    suggestedReminder = 'Consider a task-specific morning reminder if repeated missed steps appear.';
-    reminderType = 'task-specific reminder';
-  } else if (combinedContext.includes('evening')) {
-    category = 'Pattern watch';
-    status = 'Support option available';
-    observedSummary = 'Routine clip uploaded for evening-pattern tracking.';
-    observedActivity = `The clip "${clipLabel}" has been added to the patient’s routine history.`;
-    systemInterpretation =
-      'This entry is best treated as a supportive note for future pattern review, especially around evening routines.';
-    suggestedReminder = 'Add a recurring evening reminder only if similar clips continue to appear.';
-    reminderType = 'recurring reminder';
+function getStageStatus(stage: AnalysisStage) {
+  switch (stage) {
+    case 'extracting':
+      return 'Extracting frames';
+    case 'describing':
+      return 'Describing scenes';
+    case 'reasoning':
+      return 'Reasoning';
+    case 'failed':
+      return 'Analysis failed';
+    case 'complete':
+    default:
+      return 'Analysis ready';
   }
+}
+
+function buildPendingAnalysis(patient: PatientProfile, asset: ImagePickerAsset): AnalysisRecord {
+  const clipLabel = extractClipLabel(asset);
 
   return {
     id: createId('analysis'),
     patientId: patient.id,
     clipLabel,
     clipUri: asset.uri,
-    observedSummary,
-    category,
-    status,
+    clipDurationMs: asset.duration ?? null,
+    observedSummary: 'Sampling 10 frames from the uploaded video for OpenRouter analysis.',
+    category: 'AI pipeline',
+    status: getStageStatus('extracting'),
     createdAt: new Date().toISOString(),
-    observedActivity,
-    systemInterpretation,
-    suggestedReminder,
+    observedActivity: `The uploaded video "${clipLabel}" was linked to ${patient.name} and sent to the dual-model OpenRouter workflow.`,
+    systemInterpretation:
+      'This analysis is still running. The app will first describe 10 sampled frames, then reason over them with the patient profile and demo context.',
+    suggestedReminder: 'Reminder suggestions will appear after the reasoning step finishes.',
     caregiverNotes: '',
-    reminderEnabled: status === 'Reminder suggested',
-    reminderType,
+    reminderEnabled: false,
+    reminderType: 'low-priority note',
+    processingStage: 'extracting',
+    processingMessage: 'Sampling 10 frames from the uploaded video.',
+    sceneDescriptions: [],
   };
+}
+
+function normalizePatient(patient: PatientProfile): PatientProfile {
+  return {
+    ...patient,
+    name: defaultPatientNamesById[patient.id] ?? patient.name,
+    supportTags: patient.supportTags ?? [],
+    focusNote: patient.focusNote ?? 'General daily routine support',
+    lastAnalysisAt: patient.lastAnalysisAt ?? null,
+  };
+}
+
+function normalizeAnalysis(analysis: AnalysisRecord): AnalysisRecord {
+  return {
+    ...analysis,
+    clipDurationMs: analysis.clipDurationMs ?? null,
+    caregiverNotes: analysis.caregiverNotes ?? '',
+    reminderEnabled: analysis.reminderEnabled ?? false,
+    reminderType: analysis.reminderType ?? 'low-priority note',
+    processingStage: analysis.processingStage ?? 'complete',
+    processingMessage: analysis.processingMessage ?? 'Analysis ready.',
+    sceneDescriptions: analysis.sceneDescriptions ?? [],
+  };
+}
+
+function getLatestAnalysisDate(analyses: AnalysisRecord[], patientId: string) {
+  const dates = analyses
+    .filter((analysis) => analysis.patientId === patientId)
+    .map((analysis) => analysis.createdAt)
+    .sort((left, right) => new Date(right).getTime() - new Date(left).getTime());
+
+  return dates[0] ?? null;
 }
 
 export function AppStateProvider({ children }: React.PropsWithChildren) {
   const [state, setState] = useState<StoredState>(initialState);
   const [isReady, setIsReady] = useState(false);
+  const [activeAnalysisId, setActiveAnalysisId] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -135,10 +154,19 @@ export function AppStateProvider({ children }: React.PropsWithChildren) {
           return;
         }
 
+        const normalizedPatients = parsed.patients.map(normalizePatient);
+        const normalizedAnalyses = (parsed.analyses ?? []).map(normalizeAnalysis);
+        const storedSelectedPatientId = parsed.selectedPatientId ?? normalizedPatients[0]?.id ?? null;
+        const selectedPatientId = normalizedPatients.some(
+          (patient) => patient.id === storedSelectedPatientId
+        )
+          ? storedSelectedPatientId
+          : normalizedPatients[0]?.id ?? null;
+
         setState({
-          patients: parsed.patients,
-          analyses: parsed.analyses ?? [],
-          selectedPatientId: parsed.selectedPatientId ?? parsed.patients[0]?.id ?? null,
+          patients: normalizedPatients,
+          analyses: normalizedAnalyses,
+          selectedPatientId,
         });
       })
       .finally(() => {
@@ -187,6 +215,32 @@ export function AppStateProvider({ children }: React.PropsWithChildren) {
     }));
   };
 
+  const deletePatient = (patientId: string) => {
+    setState((currentState) => {
+      const remainingPatients = currentState.patients.filter((patient) => patient.id !== patientId);
+      const remainingAnalyses = currentState.analyses.filter((analysis) => analysis.patientId !== patientId);
+      const nextSelectedPatientId =
+        currentState.selectedPatientId === patientId
+          ? remainingPatients[0]?.id ?? null
+          : currentState.selectedPatientId;
+
+      return {
+        ...currentState,
+        patients: remainingPatients,
+        analyses: remainingAnalyses,
+        selectedPatientId: nextSelectedPatientId,
+      };
+    });
+
+    setActiveAnalysisId((currentId) => {
+      const removedAnalysis = state.analyses.find(
+        (analysis) => analysis.patientId === patientId && analysis.id === currentId
+      );
+
+      return removedAnalysis ? null : currentId;
+    });
+  };
+
   const updateAnalysis = (analysisId: string, updates: UpdateAnalysisInput) => {
     setState((currentState) => ({
       ...currentState,
@@ -196,14 +250,88 @@ export function AppStateProvider({ children }: React.PropsWithChildren) {
     }));
   };
 
-  const addAnalysisFromClip = (patientId: string, asset: ImagePickerAsset) => {
+  const deleteAnalysis = (analysisId: string) => {
+    setState((currentState) => {
+      const analysisToDelete = currentState.analyses.find((analysis) => analysis.id === analysisId);
+
+      if (!analysisToDelete) {
+        return currentState;
+      }
+
+      const remainingAnalyses = currentState.analyses.filter((analysis) => analysis.id !== analysisId);
+
+      return {
+        ...currentState,
+        analyses: remainingAnalyses,
+        patients: currentState.patients.map((patient) =>
+          patient.id === analysisToDelete.patientId
+            ? {
+                ...patient,
+                lastAnalysisAt: getLatestAnalysisDate(remainingAnalyses, patient.id),
+              }
+            : patient
+        ),
+      };
+    });
+
+    setActiveAnalysisId((currentId) => (currentId === analysisId ? null : currentId));
+  };
+
+  const runClipAnalysis = async (
+    analysisId: string,
+    patient: PatientProfile,
+    asset: ImagePickerAsset,
+    clipLabel: string
+  ) => {
+    try {
+      const updateStage = (stage: Extract<AnalysisStage, 'extracting' | 'describing' | 'reasoning'>, message: string) => {
+        updateAnalysis(analysisId, {
+          processingStage: stage,
+          processingMessage: message,
+          status: getStageStatus(stage),
+          observedSummary: message,
+        });
+      };
+
+      const result = await analyzeClipWithOpenRouter(patient, asset, clipLabel, updateStage);
+
+      updateAnalysis(analysisId, {
+        ...result,
+        processingStage: 'complete',
+        processingMessage: 'OpenRouter analysis is ready to review.',
+        status: result.status || getStageStatus('complete'),
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'The analysis pipeline stopped before OpenRouter returned a result.';
+
+      updateAnalysis(analysisId, {
+        processingStage: 'failed',
+        processingMessage: message,
+        status: getStageStatus('failed'),
+        observedSummary: 'The upload was saved, but the OpenRouter analysis did not finish.',
+        category: 'Needs retry',
+        systemInterpretation:
+          'The demo kept the clip attached to the patient, but the AI steps did not complete successfully.',
+        suggestedReminder: 'No reminder was suggested because the analysis did not finish.',
+        reminderEnabled: false,
+        reminderType: 'low-priority note',
+      });
+    } finally {
+      setActiveAnalysisId((currentId) => (currentId === analysisId ? null : currentId));
+    }
+  };
+
+  const startClipAnalysis = (patientId: string, asset: ImagePickerAsset) => {
     const patient = state.patients.find((item) => item.id === patientId);
 
     if (!patient) {
       throw new Error('Patient not found');
     }
 
-    const newAnalysis = buildAnalysisFromClip(patient, asset);
+    const newAnalysis = buildPendingAnalysis(patient, asset);
 
     setState((currentState) => ({
       ...currentState,
@@ -213,6 +341,9 @@ export function AppStateProvider({ children }: React.PropsWithChildren) {
         item.id === patientId ? { ...item, lastAnalysisAt: newAnalysis.createdAt } : item
       ),
     }));
+
+    setActiveAnalysisId(newAnalysis.id);
+    void runClipAnalysis(newAnalysis.id, patient, asset, newAnalysis.clipLabel);
 
     return newAnalysis;
   };
@@ -230,11 +361,15 @@ export function AppStateProvider({ children }: React.PropsWithChildren) {
         patients: state.patients,
         analyses: state.analyses,
         selectedPatientId: state.selectedPatientId,
+        activeAnalysisId,
+        isAnalyzingClip: activeAnalysisId !== null,
         isReady,
         addPatient,
+        deletePatient,
         updatePatient,
+        deleteAnalysis,
         updateAnalysis,
-        addAnalysisFromClip,
+        startClipAnalysis,
         selectPatient,
       }}>
       {children}

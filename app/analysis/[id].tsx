@@ -4,7 +4,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { appColors } from '@/constants/app-theme';
-import { type ReminderType } from '@/constants/care-data';
+import { type AnalysisStage, type ReminderType } from '@/constants/care-data';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { formatDateTime } from '@/lib/date';
 import { useAppState } from '@/providers/app-state';
@@ -17,6 +17,24 @@ const reminderOptions: ReminderType[] = [
   'low-priority note',
 ];
 
+const stageOrder: AnalysisStage[] = ['extracting', 'describing', 'reasoning', 'complete'];
+
+function stageLabel(stage: AnalysisStage) {
+  switch (stage) {
+    case 'extracting':
+      return 'Extract frames';
+    case 'describing':
+      return 'Describe scenes';
+    case 'reasoning':
+      return 'Reason over context';
+    case 'failed':
+      return 'Analysis failed';
+    case 'complete':
+    default:
+      return 'Analysis ready';
+  }
+}
+
 export default function AnalysisDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const analysisId = Array.isArray(id) ? id[0] : id;
@@ -25,6 +43,7 @@ export default function AnalysisDetailScreen() {
   const { analyses, patients, updateAnalysis, selectPatient } = useAppState();
   const analysis = analyses.find((item) => item.id === analysisId);
   const patient = patients.find((item) => item.id === analysis?.patientId);
+  const sceneDescriptions = analysis?.sceneDescriptions ?? [];
   const [caregiverNotes, setCaregiverNotes] = useState('');
   const [reminderEnabled, setReminderEnabled] = useState(false);
   const [reminderType, setReminderType] = useState<ReminderType>('low-priority note');
@@ -49,12 +68,18 @@ export default function AnalysisDetailScreen() {
     );
   }
 
+  const isComplete = analysis.processingStage === 'complete';
+  const isFailed = analysis.processingStage === 'failed';
+  const currentStageIndex = stageOrder.indexOf(
+    isFailed ? 'reasoning' : analysis.processingStage === 'complete' ? 'complete' : analysis.processingStage
+  );
+
   const handleSave = () => {
     updateAnalysis(analysis.id, {
       caregiverNotes: caregiverNotes.trim(),
       reminderEnabled,
       reminderType,
-      status: reminderEnabled ? 'Reminder suggested' : 'Review ready',
+      status: reminderEnabled ? 'Reminder suggested' : 'Analysis ready',
       suggestedReminder: reminderEnabled
         ? analysis.suggestedReminder
         : 'No reminder is currently enabled for this clip.',
@@ -98,6 +123,87 @@ export default function AnalysisDetailScreen() {
           </View>
         </View>
 
+        {!isComplete ? (
+          <View
+            style={[
+              styles.sectionCard,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+              },
+            ]}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>
+              {isFailed ? 'Analysis stopped' : 'Processing clip'}
+            </Text>
+            <Text style={[styles.sectionBody, { color: colors.subtext }]}>
+              {analysis.processingMessage}
+            </Text>
+
+            <View style={styles.stageList}>
+              {stageOrder.map((stage, index) => {
+                const isDone = !isFailed && index < currentStageIndex;
+                const isActive =
+                  (!isFailed && stage === analysis.processingStage) ||
+                  (analysis.processingStage === 'complete' && stage === 'complete');
+
+                return (
+                  <View
+                    key={stage}
+                    style={[
+                      styles.stageRow,
+                      {
+                        backgroundColor:
+                          isDone || isActive ? colors.accentSoft : colors.background,
+                        borderColor: isDone || isActive ? colors.accent : colors.border,
+                      },
+                    ]}>
+                    <Text
+                      style={[
+                        styles.stageLabel,
+                        {
+                          color: isDone || isActive ? colors.accent : colors.subtext,
+                        },
+                      ]}>
+                      {stageLabel(stage)}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+
+            <Text style={[styles.helperText, { color: colors.subtext }]}>
+              This demo always samples 10 frames from the video, no matter how long the clip is.
+            </Text>
+          </View>
+        ) : null}
+
+        <View
+          style={[
+            styles.sectionCard,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+            },
+          ]}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Scene descriptions</Text>
+          {sceneDescriptions.length ? (
+            sceneDescriptions.map((scene) => (
+              <View
+                key={`${scene.index}-${scene.timeMs}`}
+                style={[styles.sceneCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                <Text style={[styles.sceneTitle, { color: colors.text }]}>
+                  Frame {scene.index} at about {Math.max(0, Math.round(scene.timeMs / 100) / 10)}s
+                </Text>
+                <Text style={[styles.sceneBody, { color: colors.subtext }]}>{scene.description}</Text>
+              </View>
+            ))
+          ) : (
+            <Text style={[styles.sectionBody, { color: colors.subtext }]}>
+              Scene descriptions will appear here after OpenRouter reads the 10 sampled frames.
+            </Text>
+          )}
+        </View>
+
         <View
           style={[
             styles.sectionCard,
@@ -134,17 +240,19 @@ export default function AnalysisDetailScreen() {
           ]}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Suggested reminder</Text>
           <Text style={[styles.sectionBody, { color: colors.subtext }]}>
-            {reminderEnabled ? analysis.suggestedReminder : 'Reminder disabled for now.'}
+            {isComplete
+              ? reminderEnabled
+                ? analysis.suggestedReminder
+                : 'Reminder disabled for now.'
+              : 'Reminder options unlock after the reasoning step finishes.'}
           </Text>
 
           <View style={styles.switchRow}>
             <View style={styles.switchText}>
               <Text style={[styles.switchTitle, { color: colors.text }]}>Enable reminder setup</Text>
-              <Text style={[styles.switchBody, { color: colors.subtext }]}>
-                Keep this framed as caregiver support, not a medical alert.
-              </Text>
             </View>
             <Switch
+              disabled={!isComplete}
               value={reminderEnabled}
               onValueChange={setReminderEnabled}
               thumbColor="#FFFFFF"
@@ -159,12 +267,14 @@ export default function AnalysisDetailScreen() {
               return (
                 <Pressable
                   key={option}
+                  disabled={!isComplete}
                   onPress={() => setReminderType(option)}
                   style={[
                     styles.reminderChip,
                     {
                       backgroundColor: isSelected ? colors.accentSoft : colors.background,
                       borderColor: isSelected ? colors.accent : colors.border,
+                      opacity: isComplete ? 1 : 0.55,
                     },
                   ]}>
                   <Text style={[styles.reminderChipText, { color: isSelected ? colors.accent : colors.subtext }]}>
@@ -186,6 +296,7 @@ export default function AnalysisDetailScreen() {
           ]}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Caregiver notes</Text>
           <TextInput
+            editable={isComplete}
             value={caregiverNotes}
             onChangeText={setCaregiverNotes}
             placeholder="Add your own note or follow-up plan"
@@ -198,13 +309,23 @@ export default function AnalysisDetailScreen() {
                 backgroundColor: colors.background,
                 borderColor: colors.border,
                 color: colors.text,
+                opacity: isComplete ? 1 : 0.55,
               },
             ]}
           />
         </View>
 
-        <Pressable onPress={handleSave} style={[styles.saveButton, { backgroundColor: colors.accent }]}>
-          <Text style={styles.saveButtonText}>Save reminder settings</Text>
+        <Pressable
+          disabled={!isComplete}
+          onPress={handleSave}
+          style={[
+            styles.saveButton,
+            {
+              backgroundColor: colors.accent,
+              opacity: isComplete ? 1 : 0.55,
+            },
+          ]}>
+          <Text style={styles.saveButtonText}>{isComplete ? 'Save reminder settings' : 'Waiting for analysis'}</Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>
@@ -265,6 +386,41 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 21,
   },
+  stageList: {
+    gap: 10,
+    marginTop: 18,
+  },
+  stageRow: {
+    borderWidth: 1,
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  stageLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  helperText: {
+    marginTop: 14,
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  sceneCard: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 14,
+    marginTop: 12,
+  },
+  sceneTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 20,
+  },
+  sceneBody: {
+    marginTop: 8,
+    fontSize: 14,
+    lineHeight: 21,
+  },
   switchRow: {
     marginTop: 18,
     flexDirection: 'row',
@@ -278,11 +434,6 @@ const styles = StyleSheet.create({
   switchTitle: {
     fontSize: 15,
     fontWeight: '700',
-  },
-  switchBody: {
-    marginTop: 6,
-    fontSize: 13,
-    lineHeight: 19,
   },
   reminderOptions: {
     flexDirection: 'row',

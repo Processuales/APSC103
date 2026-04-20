@@ -12,7 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { appColors } from '@/constants/app-theme';
-import { patientSupportTags } from '@/constants/care-data';
+import { patientSexOptions, patientSupportTags } from '@/constants/care-data';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { formatDate } from '@/lib/date';
 import { useAppState } from '@/providers/app-state';
@@ -147,9 +147,10 @@ export default function PatientDetailScreen() {
           <View style={styles.inlineInputs}>
             <TextInput
               value={age}
-              onChangeText={setAge}
+              onChangeText={(value) => setAge(value.replace(/[^0-9]/g, ''))}
               placeholder="Age"
               placeholderTextColor={colors.subtext}
+              keyboardType="number-pad"
               style={[
                 styles.input,
                 styles.inlineInput,
@@ -160,21 +161,31 @@ export default function PatientDetailScreen() {
                 },
               ]}
             />
-            <TextInput
-              value={sex}
-              onChangeText={setSex}
-              placeholder="Sex"
-              placeholderTextColor={colors.subtext}
-              style={[
-                styles.input,
-                styles.inlineInput,
-                {
-                  backgroundColor: colors.background,
-                  borderColor: colors.border,
-                  color: colors.text,
-                },
-              ]}
-            />
+            <View style={styles.inlineInput}>
+              <Text style={[styles.supportLabel, { color: colors.text }]}>Sex</Text>
+              <View style={styles.optionWrap}>
+                {patientSexOptions.map((option) => {
+                  const isSelected = sex === option;
+
+                  return (
+                    <Pressable
+                      key={option}
+                      onPress={() => setSex(option)}
+                      style={[
+                        styles.optionChip,
+                        {
+                          backgroundColor: isSelected ? colors.accentSoft : colors.background,
+                          borderColor: isSelected ? colors.accent : colors.border,
+                        },
+                      ]}>
+                      <Text style={[styles.optionText, { color: isSelected ? colors.accent : colors.subtext }]}>
+                        {option}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
           </View>
           <TextInput
             value={caregiverName}
@@ -403,6 +414,22 @@ const styles = StyleSheet.create({
   supportLabel: {
     marginTop: 4,
     fontSize: 14,
+    fontWeight: '700',
+  },
+  optionWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+  optionChip: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  optionText: {
+    fontSize: 12,
     fontWeight: '700',
   },
   tagWrap: {

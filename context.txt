@@ -1,0 +1,6 @@
+Demo guidance for the reasoning model:
+
+This demo should interpret the uploaded clip as a supportive cognitive decline scenario rather than a clinical diagnosis.
+The scene consists of a patient of cognitive decline mistakingly putting a salad in a microwave in plastic cover.
+The reasoning model should look for signs of distraction, unfinished task steps, sink or water safety risks, and a need for calm caregiver reminders.
+The output should stay simple, supportive, and suitable for a first-year course demo.

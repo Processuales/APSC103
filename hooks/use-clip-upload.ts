@@ -6,13 +6,21 @@ import { useAppState } from '@/providers/app-state';
 
 export function useClipUpload() {
   const router = useRouter();
-  const { addAnalysisFromClip, selectedPatientId } = useAppState();
+  const { isAnalyzingClip, selectedPatientId, startClipAnalysis } = useAppState();
 
   const pickClip = async (patientId?: string) => {
     const targetPatientId = patientId ?? selectedPatientId;
 
     if (!targetPatientId) {
       Alert.alert('Select a patient first', 'Create or choose a patient before uploading a clip.');
+      return;
+    }
+
+    if (isAnalyzingClip) {
+      Alert.alert(
+        'Analysis already running',
+        'Please wait for the current clip to finish processing before starting another one.'
+      );
       return;
     }
 
@@ -36,7 +44,7 @@ export function useClipUpload() {
       return;
     }
 
-    const analysis = addAnalysisFromClip(targetPatientId, result.assets[0]);
+    const analysis = startClipAnalysis(targetPatientId, result.assets[0]);
 
     router.push({
       pathname: '/analysis/[id]',

@@ -9,16 +9,13 @@ import { useAppState } from '@/providers/app-state';
 export default function DashboardScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = appColors[colorScheme];
-  const { patients, analyses, selectedPatientId, selectPatient } = useAppState();
+  const { activeAnalysisId, analyses, isAnalyzingClip, patients, selectedPatientId, selectPatient } =
+    useAppState();
   const { pickClip } = useClipUpload();
 
   const selectedPatient = patients.find((patient) => patient.id === selectedPatientId) ?? patients[0];
-  const reminderCount = analyses.filter(
-    (analysis) =>
-      analysis.reminderEnabled ||
-      analysis.status === 'Reminder suggested' ||
-      analysis.status === 'Support option available'
-  ).length;
+  const activeAnalysis = analyses.find((analysis) => analysis.id === activeAnalysisId);
+  const reminderCount = analyses.filter((analysis) => analysis.reminderEnabled).length;
   const stats = [
     { label: 'Total patients', value: patients.length.toString().padStart(2, '0') },
     { label: 'Clips analyzed', value: analyses.length.toString().padStart(2, '0') },
@@ -26,7 +23,9 @@ export default function DashboardScreen() {
   ];
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+    <SafeAreaView
+      edges={['top', 'left', 'right']}
+      style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <ScrollView
         style={{ backgroundColor: colors.background }}
         contentContainerStyle={styles.content}
@@ -86,11 +85,24 @@ export default function DashboardScreen() {
 
           <Pressable
             onPress={() => pickClip(selectedPatient?.id)}
-            style={[styles.primaryButton, { backgroundColor: colors.accent }]}>
-            <Text style={styles.primaryButtonText}>Upload Clip</Text>
+            disabled={isAnalyzingClip}
+            style={[
+              styles.primaryButton,
+              {
+                backgroundColor: colors.accent,
+                opacity: isAnalyzingClip ? 0.65 : 1,
+              },
+            ]}>
+            <Text style={styles.primaryButtonText}>
+              {isAnalyzingClip ? 'Analysis Running...' : 'Upload Clip'}
+            </Text>
           </Pressable>
 
-          {selectedPatient ? (
+          {isAnalyzingClip && activeAnalysis ? (
+            <Text style={[styles.helperText, { color: colors.subtext }]}>
+              {activeAnalysis.processingMessage}
+            </Text>
+          ) : selectedPatient ? (
             <Text style={[styles.helperText, { color: colors.subtext }]}>
               Uploads will be saved under {selectedPatient.name}.
             </Text>
@@ -119,6 +131,28 @@ export default function DashboardScreen() {
             ))}
           </View>
         </View>
+
+        {isAnalyzingClip && activeAnalysis ? (
+          <View
+            style={[
+              styles.processingCard,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+              },
+            ]}>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>Current AI run</Text>
+            <Text style={[styles.processingClip, { color: colors.text }]}>{activeAnalysis.clipLabel}</Text>
+            <Text style={[styles.processingText, { color: colors.subtext }]}>
+              {activeAnalysis.processingMessage}
+            </Text>
+            <Text style={[styles.processingText, { color: colors.subtext }]}>
+              The app always samples 10 frames, then uses OpenRouter with the
+              google/gemini-2.5-flash model twice: first for scene descriptions, then for
+              reasoning.
+            </Text>
+          </View>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -216,9 +250,25 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     padding: 18,
   },
+  processingCard: {
+    borderWidth: 1,
+    borderRadius: 24,
+    padding: 18,
+    gap: 10,
+  },
   cardTitle: {
     fontSize: 18,
     fontWeight: '700',
+    textAlign: 'center',
+  },
+  processingClip: {
+    fontSize: 17,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  processingText: {
+    fontSize: 14,
+    lineHeight: 21,
     textAlign: 'center',
   },
   statRow: {
