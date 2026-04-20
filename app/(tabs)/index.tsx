@@ -1,27 +1,40 @@
-import { Link } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { appColors } from '@/constants/app-theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useClipUpload } from '@/hooks/use-clip-upload';
+import { useAppState } from '@/providers/app-state';
 
-import { summaryCards, recentItems } from '@/constants/MockData';
-
-export default function HomeScreen() {
+export default function DashboardScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = appColors[colorScheme];
+  const { patients, analyses, selectedPatientId, selectPatient } = useAppState();
+  const { pickClip } = useClipUpload();
+
+  const selectedPatient = patients.find((patient) => patient.id === selectedPatientId) ?? patients[0];
+  const reminderCount = analyses.filter(
+    (analysis) =>
+      analysis.reminderEnabled ||
+      analysis.status === 'Reminder suggested' ||
+      analysis.status === 'Support option available'
+  ).length;
+  const stats = [
+    { label: 'Total patients', value: patients.length.toString().padStart(2, '0') },
+    { label: 'Clips analyzed', value: analyses.length.toString().padStart(2, '0') },
+    { label: 'Reminders pending', value: reminderCount.toString().padStart(2, '0') },
+  ];
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <ScrollView
+        style={{ backgroundColor: colors.background }}
         contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-        style={{ backgroundColor: colors.background }}>
+        showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Text style={[styles.overline, { color: colors.accent }]}>Caregiver App</Text>
-          <Text style={[styles.title, { color: colors.text }]}>Dashboard</Text>
+          <Text style={[styles.title, { color: colors.text }]}>Caregiver Dashboard</Text>
           <Text style={[styles.subtitle, { color: colors.subtext }]}>
-            A simple overview of patient activity summaries and recent reminders.
+            Upload clips for patients and keep everything in one place.
           </Text>
         </View>
 
@@ -34,112 +47,78 @@ export default function HomeScreen() {
               shadowColor: colors.shadow,
             },
           ]}>
-          <Text style={[styles.heroLabel, { color: colors.subtext }]}>Today&apos;s overview</Text>
-          <Text style={[styles.heroTitle, { color: colors.text }]}>
-            Three events may need caregiver review.
-          </Text>
-          <Text style={[styles.heroBody, { color: colors.subtext }]}>
-            The interface keeps the information short, readable, and non-diagnostic.
+          <Text style={[styles.heroTitle, { color: colors.text }]}>Upload a new clip</Text>
+          <Text style={[styles.heroText, { color: colors.subtext }]}>
+            Choose the patient first so every upload lands in the right profile and analysis
+            history.
           </Text>
 
-          <Link href="/modal" asChild>
-            <Pressable
-              style={[
-                styles.primaryButton,
-                {
-                  backgroundColor: colors.accent,
-                },
-              ]}>
-              <Text style={styles.primaryButtonText}>Open sample summary</Text>
-            </Pressable>
-          </Link>
-        </View>
+          <Text style={[styles.sectionLabel, { color: colors.text }]}>Selected patient</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chipRow}>
+            {patients.map((patient) => {
+              const isActive = patient.id === selectedPatient?.id;
 
-        <View style={styles.summaryRow}>
-          {summaryCards.map((item) => (
-            <View
-              key={item.label}
-              style={[
-                styles.summaryCard,
-                {
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                },
-              ]}>
-              <Text style={[styles.summaryLabel, { color: colors.subtext }]}>{item.label}</Text>
-              <Text style={[styles.summaryValue, { color: colors.text }]}>{item.value}</Text>
-              <Text style={[styles.summaryNote, { color: colors.subtext }]}>{item.note}</Text>
-            </View>
-          ))}
-        </View>
+              return (
+                <Pressable
+                  key={patient.id}
+                  onPress={() => selectPatient(patient.id)}
+                  style={[
+                    styles.patientChip,
+                    {
+                      backgroundColor: isActive ? colors.accentSoft : colors.background,
+                      borderColor: isActive ? colors.accent : colors.border,
+                    },
+                  ]}>
+                  <Text
+                    style={[
+                      styles.patientChipText,
+                      { color: isActive ? colors.accent : colors.subtext },
+                    ]}>
+                    {patient.name}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
 
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Quick actions</Text>
-        </View>
+          <Pressable
+            onPress={() => pickClip(selectedPatient?.id)}
+            style={[styles.primaryButton, { backgroundColor: colors.accent }]}>
+            <Text style={styles.primaryButtonText}>Upload Clip</Text>
+          </Pressable>
 
-        <View style={styles.actionRow}>
-          <View
-            style={[
-              styles.actionCard,
-              {
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-              },
-            ]}>
-            <Text style={[styles.actionTitle, { color: colors.text }]}>Upload clip</Text>
-            <Text style={[styles.actionText, { color: colors.subtext }]}>
-              Start a new visual analysis from a prerecorded video.
+          {selectedPatient ? (
+            <Text style={[styles.helperText, { color: colors.subtext }]}>
+              Uploads will be saved under {selectedPatient.name}.
             </Text>
-          </View>
-
-          <View
-            style={[
-              styles.actionCard,
-              {
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-              },
-            ]}>
-            <Text style={[styles.actionTitle, { color: colors.text }]}>Patient profiles</Text>
-            <Text style={[styles.actionText, { color: colors.subtext }]}>
-              Switch between patients and review their saved history.
+          ) : (
+            <Text style={[styles.helperText, { color: colors.subtext }]}>
+              Create a patient profile before uploading a clip.
             </Text>
-          </View>
+          )}
         </View>
 
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Recent summaries</Text>
-          <Text style={[styles.sectionLink, { color: colors.accent }]}>View all</Text>
-        </View>
-
-        {recentItems.map((item) => (
-          <View
-            key={`${item.patient}-${item.time}`}
-            style={[
-              styles.listCard,
-              {
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-              },
-            ]}>
-            <View style={styles.listTopRow}>
-              <Text style={[styles.patientName, { color: colors.text }]}>{item.patient}</Text>
-              <Text style={[styles.listTime, { color: colors.subtext }]}>{item.time}</Text>
-            </View>
-
-            <View
-              style={[
-                styles.tag,
-                {
-                  backgroundColor: colors.accentSoft,
-                },
-              ]}>
-              <Text style={[styles.tagText, { color: colors.accent }]}>{item.tag}</Text>
-            </View>
-
-            <Text style={[styles.listNote, { color: colors.subtext }]}>{item.note}</Text>
+        <View
+          style={[
+            styles.overviewCard,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+            },
+          ]}>
+          <Text style={[styles.cardTitle, { color: colors.text }]}>Overview</Text>
+          <View style={styles.statRow}>
+            {stats.map((item) => (
+              <View key={item.label} style={styles.statBlock}>
+                <Text style={[styles.statValue, { color: colors.text }]}>{item.value}</Text>
+                <Text style={[styles.statLabel, { color: colors.subtext }]}>{item.label}</Text>
+              </View>
+            ))}
           </View>
-        ))}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -151,157 +130,116 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 20,
-    paddingTop: 48,
+    paddingTop: 24,
     paddingBottom: 32,
+    gap: 18,
   },
   header: {
-    marginBottom: 20,
-  },
-  overline: {
-    fontSize: 12,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-    marginBottom: 8,
+    gap: 8,
+    alignItems: 'center',
   },
   title: {
     fontSize: 30,
     fontWeight: '700',
     lineHeight: 36,
+    textAlign: 'center',
   },
   subtitle: {
-    marginTop: 8,
     fontSize: 15,
     lineHeight: 22,
+    textAlign: 'center',
+    maxWidth: 280,
   },
   heroCard: {
     borderWidth: 1,
-    borderRadius: 24,
+    borderRadius: 28,
     padding: 20,
-    marginBottom: 16,
-    shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.12,
-    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.16,
+    shadowRadius: 28,
     elevation: 6,
-  },
-  heroLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 8,
+    alignItems: 'center',
   },
   heroTitle: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '700',
-    lineHeight: 28,
+    textAlign: 'center',
   },
-  heroBody: {
+  heroText: {
     marginTop: 8,
     fontSize: 14,
     lineHeight: 21,
+    textAlign: 'center',
+    maxWidth: 290,
+  },
+  sectionLabel: {
+    marginTop: 18,
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  chipRow: {
+    gap: 10,
+    paddingTop: 12,
+    paddingHorizontal: 4,
+  },
+  patientChip: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  patientChipText: {
+    fontSize: 13,
+    fontWeight: '700',
   },
   primaryButton: {
     marginTop: 18,
-    alignSelf: 'flex-start',
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    borderRadius: 18,
+    paddingVertical: 15,
+    paddingHorizontal: 28,
+    alignItems: 'center',
   },
   primaryButtonText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '700',
   },
-  summaryRow: {
-    flexDirection: 'row',
-    gap: 16,
-    marginBottom: 20,
+  helperText: {
+    marginTop: 10,
+    fontSize: 13,
+    lineHeight: 20,
+    textAlign: 'center',
   },
-  summaryCard: {
-    flex: 1,
+  overviewCard: {
     borderWidth: 1,
-    borderRadius: 20,
-    padding: 16,
+    borderRadius: 24,
+    padding: 18,
   },
-  summaryLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 10,
-  },
-  summaryValue: {
-    fontSize: 28,
-    fontWeight: '700',
-    lineHeight: 32,
-  },
-  summaryNote: {
-    marginTop: 6,
-    fontSize: 13,
-  },
-  sectionHeader: {
-    marginBottom: 12,
-    marginTop: 4,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  sectionTitle: {
+  cardTitle: {
     fontSize: 18,
     fontWeight: '700',
+    textAlign: 'center',
   },
-  sectionLink: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  actionRow: {
-    marginBottom: 20,
-  },
-  actionCard: {
-    borderWidth: 1,
-    borderRadius: 20,
-    padding: 16,
-    marginBottom: 12,
-  },
-  actionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 6,
-  },
-  actionText: {
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  listCard: {
-    borderWidth: 1,
-    borderRadius: 20,
-    padding: 16,
-    marginBottom: 12,
-  },
-  listTopRow: {
+  statRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    gap: 12,
+    marginTop: 16,
+  },
+  statBlock: {
+    flex: 1,
+    borderRadius: 20,
+    paddingVertical: 6,
     alignItems: 'center',
   },
-  patientName: {
-    fontSize: 16,
+  statValue: {
+    fontSize: 26,
     fontWeight: '700',
   },
-  listTime: {
+  statLabel: {
+    marginTop: 6,
     fontSize: 13,
-    fontWeight: '500',
-  },
-  tag: {
-    alignSelf: 'flex-start',
-    marginTop: 10,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  tagText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  listNote: {
-    marginTop: 12,
-    fontSize: 14,
-    lineHeight: 21,
+    lineHeight: 18,
+    textAlign: 'center',
   },
 });

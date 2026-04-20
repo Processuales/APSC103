@@ -1,16 +1,14 @@
 import React from 'react';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Tabs } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HapticTab } from '@/components/haptic-tab';
-import { IconSymbol } from '@/components/ui/icon-symbol';
 import { appColors } from '@/constants/app-theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = appColors[colorScheme];
-  const insets = useSafeAreaInsets();
 
   return (
     <Tabs
@@ -22,9 +20,6 @@ export default function TabLayout() {
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
-          height: 60 + Math.max(insets.bottom, 20),
-          paddingTop: 8,
-          paddingBottom: Math.max(insets.bottom, 20),
         },
         tabBarLabelStyle: {
           fontSize: 12,
@@ -35,14 +30,23 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Dashboard',
-          tabBarIcon: ({ color }) => <IconSymbol size={22} name="house.fill" color={color} />,
+          tabBarIcon: ({ color }) => <MaterialIcons size={22} name="dashboard" color={color} />,
         }}
       />
       <Tabs.Screen
-        name="explore"
+        name="patients"
         options={{
-          title: 'History',
-          tabBarIcon: ({ color }) => <IconSymbol size={22} name="clock.fill" color={color} />,
+          title: 'Patients',
+          tabBarIcon: ({ color }) => <MaterialIcons size={22} name="people-alt" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="analysis"
+        options={{
+          title: 'Analysis',
+          tabBarIcon: ({ color }) => (
+            <MaterialIcons size={22} name="insert-chart-outlined" color={color} />
+          ),
         }}
       />
     </Tabs>
